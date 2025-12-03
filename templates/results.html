@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Image Retrieval</title>
+  <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}" rel="stylesheet">
+  <!-- Optional: JS Bootstrap Offline -->
+  <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
+  <style>
+    body { background-color:#f8fafc; padding:20px; color:#333; font-family: 'Segoe UI', sans-serif;}
+    h2 { text-align:center; color:#0d6efd; margin-bottom:20px; }
+    .container { max-width: 1200px; margin:auto; }
+    .table { background:white; border-radius:10px; overflow:hidden; box-shadow:0 4px 10px rgba(0,0,0,0.05);}
+    .card { border:none; border-radius:10px; box-shadow:0 4px 10px rgba(0,0,0,0.05);}
+    .table thead { background-color:#0d6efd; color:white; }
+    .precision { font-weight:600; color:#0d6efd; margin-top:10px;}
+    .query-info { text-align:center; font-weight:600; color:#111; margin-bottom:25px;}
+
+    .result-section {
+    animation: fadeIn 0.8s ease-in-out;
+    }
+    @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+    }
+
+    .modal.fade .modal-dialog {
+      transform: scale(0.8);
+      filter: blur(6px);
+      opacity: 0;
+      transition: all 0.4s ease-out;
+    }
+
+    .modal.show .modal-dialog {
+      transform: scale(1);
+      filter: blur(0);
+      opacity: 1;
+    }
+
+    .modal-backdrop.show {
+      opacity: 0.85;
+      background-color: #000;
+    }
+
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <h2>Upload Query Image</h2>
+
+    <form id="queryForm" class="text-center mb-4" method="POST" enctype="multipart/form-data">
+        <div class="input-group w-50 mx-auto">
+            <input type="file" name="query_image" class="form-control" required>
+            <button id="searchBtn" class="btn btn-warning" type="submit">🔍 Cari</button>
+        </div>
+
+        <!-- Progress Bar -->
+        <div id="progressContainer" class="mt-4 d-none">
+            <div class="progress" style="height: 25px;">
+            <div class="progress-bar progress-bar-striped progress-bar-animated bg-success" 
+                role="progressbar" style="width: 100%">
+                Sedang melakukan pencarian...
+            </div>
+            </div>
+        </div>
+    </form>
+
+
+    {% if retrieval_data %}
+    <div class="query-info">
+      <p>Query Image: <strong>{{ query_name }}</strong></p>
+      {% if query_image %}
+        <button type="button"
+                class="btn btn-link p-0 border-0"
+                data-bs-toggle="modal"
+                data-bs-target="#imageModal"
+                data-img-src="{{ query_image }}"
+                data-img-label="{{ query_name }}"
+                data-img-sim="Query">
+          <img src="{{ query_image }}" class="img-thumbnail shadow-sm mb-3" style="width:150px;height:150px;object-fit:cover;">
+        </button>
+    {% endif %}
+    </div>
+
+      <div class="row result-section" >
+        <!-- ResNet -->
+        <div class="col-md-6 mb-4">
+          <div class="card p-3">
+            <h5 class="text-center text-primary">ResNet</h5>
+           
+            <table class="table table-hover align-middle text-center">
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>Image</th>
+                  <th>Label</th>
+                  <th>Similarity</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for r in retrieval_data['resnet']['results'] %}
+                <tr>
+                  <td>{{ r.rank }}</td>
+                  <td>
+                      {% if r.image %}
+                        <button type="button"
+                                class="btn btn-link p-0 border-0"
+                                data-bs-toggle="modal"
+                                data-bs-target="#imageModal"
+                                data-img-src="{{ r.image }}"
+                                data-img-label="{{ r.label }}"
+                                data-img-sim="{{ r.similarity | round(4) }}">
+                          <img src="{{ r.image }}" class="img-thumbnail" style="width:80px;height:80px;object-fit:cover;">
+                        </button>
+                      {% else %}
+                        <span class="text-muted">No Image</span>
+                      {% endif %}
+                  </td> 
+                  <td align="left">{{ r.label }}</td>
+                  <td align="right">{{ r.similarity | round(4) }}</td>
+                  <td>
+                    <button type="button"
+                            class="btn btn-sm btn-outline-primary mt-1"
+                            onclick="showFeaturePlot('resnet', '{{ query_name }}', '{{ r.label }}')">
+                      🔍 Lihat Grafik Fitur
+                    </button>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+            <table>
+                <tr>
+                    <td class="precision">Waktu pencarian</td>
+                    <td>{{ retrieval_data['resnet']['time'] | round(4) }} detik</td>
+                </tr>   
+                <tr>
+                    <td class="precision">Precision@{{ retrieval_data['resnet']['results']|length }}</td>
+                    <td>{{ retrieval_data['resnet']['precision'] | round(2) }} %</td>
+                </tr>
+                <tr>
+                    <td colspan="2" align="center">
+                      <button type="button" class="btn btn-outline-primary btn-sm"
+                              onclick="showExtraPlot('{{ url_for('static', filename=retrieval_data['resnet']['confusion_matrix']) }}', 'Confusion Matrix - ResNet')">
+                        🧩 Lihat Confusion Matrix Resnet
+                      </button>
+                      <button type="button" class="btn btn-outline-secondary btn-sm"
+                              onclick="showExtraPlot('{{ url_for('static', filename=retrieval_data['resnet']['scatter_plot']) }}', 'Scatter Plot - ResNet')">
+                        📊 Lihat Scatter Plot Resnet
+                      </button>
+                    </td>
+                </tr>
+            </table>
+
+        
+          </div>
+        </div>
+
+        <!-- MobileNet -->
+        <div class="col-md-6 mb-4">
+          <div class="card p-3">
+            <h5 class="text-center text-success">MobileNet</h5>           
+            <table class="table table-hover align-middle text-center">
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>Image</th>
+                  <th>Label</th>
+                  <th>Similarity</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for r in retrieval_data['mobilenet']['results'] %}
+                <tr>
+                  <td>{{ r.rank }}</td>
+                  <td>
+                      {% if r.image %}
+                        <button type="button"
+                                class="btn btn-link p-0 border-0"
+                                data-bs-toggle="modal"
+                                data-bs-target="#imageModal"
+                                data-img-src="{{ r.image }}"
+                                data-img-label="{{ r.label }}"
+                                data-img-sim="{{ r.similarity | round(4) }}">
+                          <img src="{{ r.image }}" class="img-thumbnail" style="width:80px;height:80px;object-fit:cover;">
+                        </button>
+                      {% else %}
+                        <span class="text-muted">No Image</span>
+                      {% endif %}
+                  </td> 
+                  <td align="left">{{ r.label }}</td>
+                  <td align="right">{{ r.similarity | round(4) }}</td>
+                  <td>
+                    <button type="button"
+                            class="btn btn-sm btn-outline-success mt-1"
+                            onclick="showFeaturePlot('mobilenet', '{{ query_name }}', '{{ r.label }}')">
+                      🔍 Lihat Grafik Fitur
+                    </button>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+            <table>
+                <tr>
+                    <td class="precision">Waktu pencarian</td>
+                    <td>{{ retrieval_data['mobilenet']['time'] | round(4) }} detik</td>
+                </tr>   
+                <tr>
+                    <td class="precision">Precision@{{ retrieval_data['mobilenet']['results']|length }}</td>
+                    <td>{{ retrieval_data['mobilenet']['precision'] | round(2) }} %</td>
+                </tr>
+                <tr>
+                    <td colspan="2" align="center">
+                      <button type="button" class="btn btn-outline-primary btn-sm"
+                              onclick="showExtraPlot('{{ url_for('static', filename=retrieval_data['mobilenet']['confusion_matrix']) }}', 'Confusion Matrix - mobilenet')">
+                        🧩 Lihat Confusion Matrix Mobilenet
+                      </button>
+                      <button type="button" class="btn btn-outline-secondary btn-sm"
+                              onclick="showExtraPlot('{{ url_for('static', filename=retrieval_data['mobilenet']['scatter_plot']) }}', 'Scatter Plot - mobilenet')">
+                        📊 Lihat Scatter Plot Mobilenet
+                      </button>
+                    </td>
+                </tr>
+            </table>         
+          </div>
+        </div>
+      </div>
+
+      <!-- Recall Curve -->
+      <div class="card p-3 mt-4 result-section">
+        <h5 class="text-center">Recall Curve Comparison</h5>
+        <img src="{{ url_for('static', filename=retrieval_data['recall_graph']) }}" class="img-fluid d-block mx-auto rounded shadow-sm" style="max-width:500px;">
+      </div>
+    {% endif %}
+  </div>
+  <!-- Image Modal -->
+  <!-- Modal Gambar -->
+  <div class="modal fade" id="imageModal" tabindex="-1" aria-labelledby="imageModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content bg-transparent border-0 text-center position-relative">
+
+        <!-- Gambar -->
+        <img id="modalImage" src="" class="img-fluid rounded shadow-lg" alt="Image Preview" style="max-height: 80vh;">
+      </div>
+    </div>
+  </div>
+
+
+</body>
+
+<script>
+  document.getElementById("queryForm").addEventListener("submit", function() 
+  {
+  document.getElementById("progressContainer").classList.remove("d-none");
+  document.getElementById("searchBtn").disabled = true;
+  document.getElementById("searchBtn").innerHTML = "⏳ Sedang mencari...";
+  });
+
+// Modal image handler
+  var imageModal = document.getElementById('imageModal');
+  imageModal.addEventListener('show.bs.modal', function (event) 
+  {
+  var button = event.relatedTarget; // tombol yang memicu modal
+  var imgSrc = button.getAttribute('data-img-src');
+  var imgLabel = button.getAttribute('data-img-label');
+  var imgSim = button.getAttribute('data-img-sim');
+
+  // isi konten modal
+  var modalImage = document.getElementById('modalImage');
+  var modalLabel = document.getElementById('modalLabel');
+  var modalSim = document.getElementById('modalSim');
+  var modalTitle = document.getElementById('imageModalLabel');
+
+  modalImage.src = imgSrc;
+  modalLabel.textContent = imgLabel;
+  modalSim.textContent = "Similarity: " + imgSim;
+  modalTitle.textContent = imgLabel;
+  }); 
+</script>
+
+<script>
+function showFeaturePlot(model, query, target) {
+    fetch(`/compare_features/${model}/${query}/${target}`)
+      .then(response => response.text())
+      .then(url => {
+          const modalContent = `
+              <div class="modal-dialog modal-dialog-centered modal-lg">
+                <div class="modal-content p-3">
+                    <h5 class="text-center text-primary">${model.toUpperCase()} Feature Comparison</h5>
+                    <img src="${url}" class="img-fluid rounded shadow-sm mx-auto d-block" style="max-height:70vh;">
+                </div>
+              </div>`;
+          const modalContainer = document.createElement('div');
+          modalContainer.classList.add('modal', 'fade');
+          modalContainer.innerHTML = modalContent;
+          document.body.appendChild(modalContainer);
+          const bsModal = new bootstrap.Modal(modalContainer);
+          bsModal.show();
+      });
+}
+</script>
+
+<script>
+function showExtraPlot(imgUrl, title) {
+    const modalContent = `
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content p-3">
+                <h5 class="text-center">${title}</h5>
+                <img src="${imgUrl}" class="img-fluid rounded shadow-sm mx-auto d-block" style="max-height:80vh;">
+            </div>
+        </div>`;
+    const modalContainer = document.createElement('div');
+    modalContainer.classList.add('modal', 'fade');
+    modalContainer.innerHTML = modalContent;
+    document.body.appendChild(modalContainer);
+    const bsModal = new bootstrap.Modal(modalContainer);
+    bsModal.show();
+}
+</script>
+
+
+
+</html>
